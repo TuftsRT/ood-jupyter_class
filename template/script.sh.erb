@@ -34,7 +34,7 @@ module list
 
 echo "TIMING - Starting jupyter at: $(date)"
 
-export JUPYTER_PATH="${PWD}/share/jupyter:/cluster/tufts/apps/manual/9/x86_64/miniforge3/envs/kernels/$course"
+export JUPYTER_PATH="${PWD}/share/jupyter:/cluster/tufts/apps/class/kernels/$course"
 jupyter kernelspec list
 
 
