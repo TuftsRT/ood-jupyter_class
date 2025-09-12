@@ -55,19 +55,21 @@ c.NotebookApp.open_browser = False
 c.NotebookApp.allow_origin = '*'
 c.NotebookApp.notebook_dir = '<%= context.working_directory %>'
 ####### DM ### Timeout kernel at 60mins, server at 61mins, both are needed for proper timeout########
-# shutdown the server after no activity for 61 minutes
+# shutdown the server after no activity for 46 minutes
 
-c.NotebookApp.shutdown_no_activity_timeout = 61 * 60
+c.NotebookApp.shutdown_no_activity_timeout = 46 * 60
 
-# shutdown kernels after no activity for 60 minutes
+# shutdown kernels after no activity for 45 minutes
 
-c.MappingKernelManager.cull_idle_timeout = 60 * 60
+c.MappingKernelManager.cull_idle_timeout = 45 * 60
 
 # Check every minute
 
 c.MappingKernelManager.cull_interval = 60
 
 # cull connected (e.g. Browser tab open)
+c.MappingKernelManager.cull_connected = True
+
 ###################
 c.NotebookApp.disable_check_xsrf = True
 <%- if context.conda_extensions == "1" -%>
