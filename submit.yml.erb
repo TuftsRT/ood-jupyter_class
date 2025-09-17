@@ -8,6 +8,7 @@ script:
   email_on_terminated: true
   email: <%= ENV["USER"] %>@tufts.edu
   job_name: "OnDemand/jupyter-class"
+  
   native:
     - "--time=<%= bc_num_hours %>:00:00"
     - "--cpus-per-task=<%= num_cores %>"
