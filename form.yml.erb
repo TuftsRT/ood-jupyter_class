@@ -13,19 +13,20 @@ attributes:
 <%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/num_memory_generic.yml").indent(2) %>
 <%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/gpu_type.yml").indent(2) %>
 <%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/all_partition.yml").indent(2) %>
-    
 
   course:
     widget: select
     label: "Course/Workshop"
     help: "The course/workshop you're taking"
     options:
+      - ["CS137", "cs137"]
+      - ["DH130", "dh130"]
       - [ "DSS", "dss" ]
       - ["ECS61", "ecs62"]
       - ["EE110", "ee110"]
       - ["EE193", "ee193"]
       - ["Data Science Workshops", "dsWorkshop"]
-
+      - ["Math123", "math123"]
   working_directory:
     widget: "text_field"
     label: "Top working directory"
