@@ -32,20 +32,10 @@ attributes:
 <%= generate_num_memory_field.indent(2) %>
 <%= generate_num_hours_field.indent(2) %>
 
-  course:
-    widget: select
-    label: "Course/Workshop"
-    help: "The course/workshop you're taking"
-    options:
-      - ["CS137", "cs137"]
-      - ["DH130", "dh130"]
-      - [ "DSS", "dss" ]
-      - ["ECS61/62", "ecs62"]
-      - ["EE110", "ee110"]
-      - ["EE141", "ee141"]
-      - ["EE193", "ee193"]
-      - ["Data Science Workshops", "dsWorkshop"]
-      - ["MATH123", "math123"]
+<%
+_course_file = '/cluster/tufts/apps/class/course_list.yml'
+%>
+<%= File.read(_course_file).rstrip if File.exist?(_course_file) %>
   working_directory:
     widget: "text_field"
     label: "Top working directory"
