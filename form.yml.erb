@@ -36,11 +36,26 @@ attributes:
 _course_file = '/cluster/tufts/apps/class/course_list.yml'
 %>
 <%= File.read(_course_file).rstrip if File.exist?(_course_file) %>
+<%
+# Read the course -> storage directory map (TSV: column 1 = course value,
+# column 2 = storage path). Embed it as a data attribute on the working
+# directory field so form.js can auto-fill it based on the selected course.
+_storage_map_file = '/cluster/tufts/apps/class/course_storage_map.tsv'
+_course_storage_map = {}
+if File.exist?(_storage_map_file)
+  File.foreach(_storage_map_file) do |line|
+    parts = line.strip.split(/\s+/, 2)
+    next if parts.length < 2 || parts[0].empty?
+    _course_storage_map[parts[0]] = parts[1]
+  end
+end
+%>
   working_directory:
     widget: "text_field"
     label: "Top working directory"
     help: Top working directory for your Jupyter session to access your notebooks and data. Default is your **$HOME**.
-    
+    data-course-storage-map: '<%= _course_storage_map.to_json %>'
+
   mode:
     widget: "radio"
     label: "Jupyter Lab or Notebook?"
