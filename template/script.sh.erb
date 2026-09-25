@@ -35,6 +35,7 @@ module list
 echo "TIMING - Starting jupyter at: $(date)"
 
 export JUPYTER_PATH="${PWD}/share/jupyter:/cluster/tufts/apps/class/kernels/$course"
+export PYTHONNOUSERSITE=True
 jupyter kernelspec list
 
 
