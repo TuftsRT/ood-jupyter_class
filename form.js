@@ -238,10 +238,20 @@ function updateNumGpusForPartition() {
 
   var selectedPartition = partitionSelect.value;
   var selectedGpuType = gpuTypeSelect ? gpuTypeSelect.value : 'none';
+  var numGpusFormGroup = numGpusInput.closest('.mb-3') || numGpusInput.closest('.form-group');
 
   if (!selectedGpuType || selectedGpuType === 'none') {
+    // CPU-only selection (e.g. "None (CPU only)" on a lab GPU partition):
+    // hide the GPU count and submit no value.
+    if (numGpusFormGroup) {
+      numGpusFormGroup.style.display = 'none';
+    }
     numGpusInput.value = '';
     return;
+  }
+
+  if (numGpusFormGroup) {
+    numGpusFormGroup.style.display = '';
   }
 
   var datasetValue = (numGpusInput.dataset && numGpusInput.dataset.partitionGpuMaxGpus) ? numGpusInput.dataset.partitionGpuMaxGpus : null;
@@ -613,105 +623,6 @@ if (document.readyState === 'loading') {
 }
 
 // ---------------------------------------------------------------------------
-// Course -> working directory auto-fill
-//
-// The course_storage_map.tsv file (course value -> storage path) is read
-// server-side in form.yml.erb and embedded as a JSON string in the
-// data-course-storage-map attribute on the working_directory text field.
-// When the user picks a course, look up its storage path in that map and set
-// the working directory field to it automatically.
-// ---------------------------------------------------------------------------
-(function () {
-  'use strict';
-
-  var COURSE_ID = 'batch_connect_session_context_course';
-  var WORKING_DIR_ID = 'batch_connect_session_context_working_directory';
-
-  function getStorageMap(workingDirInput) {
-    var datasetValue = (workingDirInput.dataset && workingDirInput.dataset.courseStorageMap)
-      ? workingDirInput.dataset.courseStorageMap
-      : null;
-    var attrValue = datasetValue ? null : workingDirInput.getAttribute('data-course-storage-map');
-    var mapJson = datasetValue || attrValue;
-    if (!mapJson) {
-      console.warn('[course-storage] no data-course-storage-map found');
-      return null;
-    }
-    try {
-      return JSON.parse(mapJson);
-    } catch (e) {
-      console.error('[course-storage] failed to parse data-course-storage-map JSON', e);
-      return null;
-    }
-  }
-
-  function updateWorkingDirectoryForCourse() {
-    var courseSelect = document.getElementById(COURSE_ID);
-    var workingDirInput = document.getElementById(WORKING_DIR_ID);
-    if (!courseSelect || !workingDirInput) {
-      return;
-    }
-
-    var map = getStorageMap(workingDirInput);
-    if (!map) {
-      return;
-    }
-
-    var selectedCourse = courseSelect.value;
-    if (Object.prototype.hasOwnProperty.call(map, selectedCourse)) {
-      workingDirInput.value = map[selectedCourse];
-      try { console.log('[course-storage] set working directory ->', map[selectedCourse]); } catch (_) {}
-    } else {
-      try { console.log('[course-storage] no storage mapping for course "' + selectedCourse + '"'); } catch (_) {}
-    }
-  }
-
-  function initializeCourseStorage() {
-    if (window.oodCourseStorageInitialized) {
-      return true;
-    }
-    var courseSelect = document.getElementById(COURSE_ID);
-    var workingDirInput = document.getElementById(WORKING_DIR_ID);
-    if (!courseSelect || !workingDirInput) {
-      return false;
-    }
-    window.oodCourseStorageInitialized = true;
-
-    courseSelect.addEventListener('change', function () {
-      try { console.log('[course-storage] course change ->', courseSelect.value); } catch (_) {}
-      updateWorkingDirectoryForCourse();
-    });
-
-    // Apply the mapping for the initially-selected course on load.
-    updateWorkingDirectoryForCourse();
-    try { console.log('[course-storage] course storage auto-fill initialized'); } catch (_) {}
-    return true;
-  }
-
-  function initializeCourseStorageWhenReady() {
-    if (initializeCourseStorage()) {
-      return;
-    }
-    setTimeout(initializeCourseStorage, 250);
-    setTimeout(initializeCourseStorage, 1000);
-    if (window.MutationObserver) {
-      var observer = new MutationObserver(function () {
-        if (initializeCourseStorage()) {
-          observer.disconnect();
-        }
-      });
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeCourseStorageWhenReady);
-  } else {
-    initializeCourseStorageWhenReady();
-  }
-})();
-
-// ---------------------------------------------------------------------------
 // Interactive QOS caps
 //
 // When the "Request priority start" checkbox (ta_qos) is checked, the job is
@@ -812,6 +723,49 @@ if (document.readyState === 'loading') {
     warning.style.display = 'block';
   }
 
+  // Partitions where "Request priority start" applies, from the partition
+  // select's data-interactive-qos-partitions (set by resource_discovery.erb).
+  // null means no data: leave the checkbox alone.
+  function interactiveQosPartitions() {
+    var partitionSelect = document.getElementById(ID_PREFIX + 'partition');
+    if (!partitionSelect) {
+      return null;
+    }
+    var json = (partitionSelect.dataset && partitionSelect.dataset.interactiveQosPartitions) ||
+      partitionSelect.getAttribute('data-interactive-qos-partitions');
+    if (!json) {
+      return null;
+    }
+    try {
+      return JSON.parse(json);
+    } catch (e) {
+      console.error('[qos] failed to parse data-interactive-qos-partitions JSON', e);
+      return null;
+    }
+  }
+
+  // Hide and uncheck "Request priority start" on partitions where
+  // --qos=interactive does not apply (preempt, blackwell, lab partitions);
+  // their jobs are submitted with the partition's own QOS instead.
+  function updateQosAvailability() {
+    var box = qosCheckbox();
+    var allowed = interactiveQosPartitions();
+    var partitionSelect = document.getElementById(ID_PREFIX + 'partition');
+    if (!box || !allowed || !partitionSelect) {
+      return;
+    }
+    var available = allowed.indexOf(partitionSelect.value) !== -1;
+    var formGroup = box.closest('.mb-3') || box.closest('.form-group') || box.closest('.form-check');
+    if (formGroup) {
+      formGroup.style.display = available ? '' : 'none';
+    }
+    if (!available && box.checked) {
+      box.checked = false;
+      applyQosLimits();
+    }
+    try { console.log('[qos] priority start', available ? 'available' : 'hidden', 'for', partitionSelect.value); } catch (_) {}
+  }
+
   function applyQosLimits() {
     var checked = interactiveChecked();
     limitedInputs().forEach(function (entry) {
@@ -847,6 +801,11 @@ if (document.readyState === 'loading') {
 
     box.addEventListener('change', applyQosLimits);
 
+    var partitionSelect = document.getElementById(ID_PREFIX + 'partition');
+    if (partitionSelect) {
+      partitionSelect.addEventListener('change', updateQosAvailability);
+    }
+
     // The resource-discovery handlers overwrite max on partition/GPU changes;
     // watch the max attributes and re-apply the cap while the box is checked.
     if (window.MutationObserver) {
@@ -867,6 +826,7 @@ if (document.readyState === 'loading') {
       });
     }
 
+    updateQosAvailability();
     applyQosLimits();
     try { console.log('[qos] interactive QOS limits initialized'); } catch (_) {}
     return true;
@@ -892,5 +852,104 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeQosLimitsWhenReady);
   } else {
     initializeQosLimitsWhenReady();
+  }
+})();
+
+// ---------------------------------------------------------------------------
+// Course -> working directory auto-fill
+//
+// The course_storage_map.tsv file (course value -> storage path) is read
+// server-side in form.yml.erb and embedded as a JSON string in the
+// data-course-storage-map attribute on the working_directory text field.
+// When the user picks a course, look up its storage path in that map and set
+// the working directory field to it automatically.
+// ---------------------------------------------------------------------------
+(function () {
+  'use strict';
+
+  var COURSE_ID = 'batch_connect_session_context_course';
+  var WORKING_DIR_ID = 'batch_connect_session_context_working_directory';
+
+  function getStorageMap(workingDirInput) {
+    var datasetValue = (workingDirInput.dataset && workingDirInput.dataset.courseStorageMap)
+      ? workingDirInput.dataset.courseStorageMap
+      : null;
+    var attrValue = datasetValue ? null : workingDirInput.getAttribute('data-course-storage-map');
+    var mapJson = datasetValue || attrValue;
+    if (!mapJson) {
+      console.warn('[course-storage] no data-course-storage-map found');
+      return null;
+    }
+    try {
+      return JSON.parse(mapJson);
+    } catch (e) {
+      console.error('[course-storage] failed to parse data-course-storage-map JSON', e);
+      return null;
+    }
+  }
+
+  function updateWorkingDirectoryForCourse() {
+    var courseSelect = document.getElementById(COURSE_ID);
+    var workingDirInput = document.getElementById(WORKING_DIR_ID);
+    if (!courseSelect || !workingDirInput) {
+      return;
+    }
+
+    var map = getStorageMap(workingDirInput);
+    if (!map) {
+      return;
+    }
+
+    var selectedCourse = courseSelect.value;
+    if (Object.prototype.hasOwnProperty.call(map, selectedCourse)) {
+      workingDirInput.value = map[selectedCourse];
+      try { console.log('[course-storage] set working directory ->', map[selectedCourse]); } catch (_) {}
+    } else {
+      try { console.log('[course-storage] no storage mapping for course "' + selectedCourse + '"'); } catch (_) {}
+    }
+  }
+
+  function initializeCourseStorage() {
+    if (window.oodCourseStorageInitialized) {
+      return true;
+    }
+    var courseSelect = document.getElementById(COURSE_ID);
+    var workingDirInput = document.getElementById(WORKING_DIR_ID);
+    if (!courseSelect || !workingDirInput) {
+      return false;
+    }
+    window.oodCourseStorageInitialized = true;
+
+    courseSelect.addEventListener('change', function () {
+      try { console.log('[course-storage] course change ->', courseSelect.value); } catch (_) {}
+      updateWorkingDirectoryForCourse();
+    });
+
+    // Apply the mapping for the initially-selected course on load.
+    updateWorkingDirectoryForCourse();
+    try { console.log('[course-storage] course storage auto-fill initialized'); } catch (_) {}
+    return true;
+  }
+
+  function initializeCourseStorageWhenReady() {
+    if (initializeCourseStorage()) {
+      return;
+    }
+    setTimeout(initializeCourseStorage, 250);
+    setTimeout(initializeCourseStorage, 1000);
+    if (window.MutationObserver) {
+      var observer = new MutationObserver(function () {
+        if (initializeCourseStorage()) {
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeCourseStorageWhenReady);
+  } else {
+    initializeCourseStorageWhenReady();
   }
 })();
