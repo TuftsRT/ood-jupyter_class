@@ -53,7 +53,7 @@ c.NotebookApp.password = u'sha1:${SALT}:${PASSWORD_SHA1}'
 c.NotebookApp.base_url = '/node/${host}/${port}/'
 c.NotebookApp.open_browser = False
 c.NotebookApp.allow_origin = '*'
-c.NotebookApp.notebook_dir = '<%= context.working_directory %>'
+c.NotebookApp.notebook_dir = '<%= context.working_directory.to_s.strip %>'
 ####### DM ### Timeout kernel at 60mins, server at 61mins, both are needed for proper timeout########
 # shutdown the server after no activity for 61 minutes
 

@@ -8,7 +8,7 @@ echo "TTT - $(date)"
 #
 
 # Set the working directory
-workdir="<%= context.working_directory %>"
+workdir="<%= context.working_directory.to_s.strip %>"
 course="<%= context.course %>"
 
 # If the working directory does not exist, set it to $HOME
@@ -18,7 +18,7 @@ if [[ -z "$workdir" ]] || [[ ! -d "$workdir" ]]; then
 fi
 
 echo "Using working directory: $workdir"
-cd $workdir
+cd "$workdir"
 
 
 # Start Jupyter Notebook Server
