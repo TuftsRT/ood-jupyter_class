@@ -1,79 +1,159 @@
-# Batch Connect - Example Jupyter Notebook Server
+# Tufts Jupyter for Classroom
 
-![GitHub Release](https://img.shields.io/github/release/osc/bc_example_jupyter.svg)
-![GitHub License](https://img.shields.io/github/license/osc/bc_example_jupyter.svg)
+This repository contains an Open OnDemand Batch Connect app that starts a
+[Jupyter](https://jupyter.org/) server (JupyterLab or the classic Notebook)
+for courses and workshops on the Tufts HPC Slurm cluster (`pax`).
 
-An example Batch Connect app that launches a Jupyter Notebook server within a
-batch job.
+It works like the general Tufts Jupyter app, but students first pick their
+course. The course decides which Jupyter kernels they see and, where one is
+set up, fills in the course storage directory as the working directory.
+Users connect from their browser with the **Connect to Jupyter** button.
 
-## Prerequisites
+## Features
 
-This Batch Connect app requires the following software be installed on the
-**compute nodes** that the batch job is intended to run on (**NOT** the
-OnDemand node):
+- **Course/Workshop** selector, read from a course list maintained outside
+  this repository.
+- Course kernels: `JUPYTER_PATH` points at
+  `/cluster/tufts/apps/class/kernels/<course>`, so students see the kernels
+  set up for their course. `PYTHONNOUSERSITE=True` keeps packages in the
+  student's `~/.local` from interfering.
+- Working directory auto-fill: picking a course sets **Top working
+  directory** to that course's storage path, if it has one. Students can
+  still edit it, and it falls back to `$HOME` if the directory does not
+  exist.
+- Choice of JupyterLab or Jupyter Notebook, and an optional extra module to
+  load.
+- Finds all Slurm partitions (CPU and GPU), GPU types, and their core,
+  memory, and wall-time limits when the form loads, through a shared
+  resource-discovery partial.
+- Warns when the selected GPU type is unavailable, and updates GPU, core,
+  memory, and hour limits when the partition changes.
+- Optional GPU request (specific type, `any`, or none on CPU partitions).
+- Optional "Request priority start" checkbox that submits with
+  `--qos=interactive` and limits the resource fields to that QOS
+  (4 hours, 16 cores, 64 GB, 1 GPU). It is hidden on partitions where the
+  interactive QOS does not apply.
+- Optional email notification when the session starts.
+- Idle shutdown: idle kernels are stopped after 60 minutes and the server
+  after 61 minutes without activity, which ends the job. Kernels with an open
+  browser tab are not stopped.
 
-- [Jupyter Notebook](http://jupyter.readthedocs.io/en/latest/) 4.2.3+ (earlier
-  versions are untested but may work for you)
-- [OpenSSL](https://www.openssl.org/) 1.0.1+ (used to hash the Jupyter Notebook
-  server password)
+## Course Configuration
 
-**Optional** software:
+Courses are managed in files under `/cluster/tufts/apps/class/`, outside this
+repository, so a new term needs no code change:
 
-- [Anaconda](https://www.continuum.io/anaconda-overview) 4.3.13+ and its
-  [Jupyter Notebook extensions](https://docs.continuum.io/anaconda/user-guide/tasks/use-jupyter-notebook-extensions)
-  that allow users to define custom environment-based kernels from within the
-  Jupyter notebook dashboard.
-- [Lmod](https://www.tacc.utexas.edu/research-development/tacc-projects/lmod)
-  6.0.1+ or any other `module purge` and `module load <modules>` based CLI
-  used to load appropriate environments within the batch job before launching
-  the Jupyter Notebook server.
+- `course_list.yml`: the `course` select field (label and value for each
+  course), inserted as-is into the form's `attributes`. For example:
 
-## Install
+  ```yaml
+    course:
+      widget: select
+      label: "Course/Workshop"
+      help: "The course/workshop you're taking"
+      options:
+        - ["CS0137", "cs0137"]
+        - ["Data Science Workshops", "dsWorkshop"]
+  ```
 
-These are command line only installation directions.
+- `course_storage_map.tsv`: optional map from course value to storage
+  directory, one course per line separated by whitespace. Courses not listed
+  keep the working directory the student entered.
 
-We start by downloading a zipped package of this code. This allows us to start
-with a fresh directory that has no git history as we will be building off of
-this.
+  ```
+  cs0137	/cluster/tufts/c27sp1cs0137
+  me0130	/cluster/tufts/c26fa1me0130
+  ```
 
-```sh
-# Download the zip from the GitHub page
-wget https://github.com/OSC/bc_example_jupyter/archive/master.tar.gz
+- `kernels/<course>/`: Jupyter data directory for each course (for example
+  `kernels/cs0137/kernels/<name>/kernel.json`).
 
-# Create a catchy directory
-mkdir my_jupyter_app
+To add a course, add it to `course_list.yml`, create its
+`kernels/<course>/` directory, and optionally add its storage path to
+`course_storage_map.tsv`.
 
-# Unzip the downloaded file into this directory
-tar xzvf master.tar.gz -C my_jupyter_app --strip-components=1
+## Repository Layout
 
-# Change the working directory to this new directory
-cd my_jupyter_app
-```
+- `manifest.yml`: Open OnDemand app metadata (listed under **Classroom**).
+- `form.yml.erb`: Launch form. Partition, hours, cores, memory, and GPU type
+  fields are generated by `resource_discovery.erb` with
+  `@partition_filter = :all`. It also inserts `course_list.yml` and embeds
+  `course_storage_map.tsv` as JSON on the working directory field.
+- `form.js`: Browser logic for resource discovery, GPU availability warnings,
+  and interactive-QOS limits (shared with the other Tufts apps), plus the
+  course-to-working-directory auto-fill.
+- `submit.yml.erb`: Slurm submission template (time, CPUs, memory, partition,
+  GPU `gres`/constraint, and QOS) using the `basic` Batch Connect template.
+  The QOS comes from the shared `partition_qos.rb` (for example `preempt` on
+  the preempt partition, `normal-contrib` on lab partitions, `interactive`
+  only where allowed).
+- `template/before.sh.erb`: Finds a free port, generates a password, and
+  writes the Jupyter config (`config.py`): base URL, password, working
+  directory, and idle-shutdown settings.
+- `template/script.sh.erb`: Changes to the working directory, loads the
+  `jupyter` and requested modules, sets `JUPYTER_PATH` for the course and
+  `PYTHONNOUSERSITE`, and starts `jupyter lab` or `jupyter notebook`.
+- `template/after.sh`: Waits up to 60 seconds for the server to open its
+  port.
+- `view.html.erb`: The **Connect to Jupyter** button, which logs in with the
+  generated password.
+- `icon.png`: App icon.
 
-From here you will make any modifications to the code that you would like and
-version your changes in your own repository:
+## Requirements
 
-```sh
-# Version our app by making a new Git repository
-git init
+- Open OnDemand with Batch Connect.
+- Slurm scheduler.
+- A `jupyter` module on the compute nodes.
+- OpenSSL on the compute nodes (used to hash the server password).
+- The course files in `/cluster/tufts/apps/class/` described above.
+- The shared site partials:
+  - `/etc/ood/config/apps/dashboard/batch_connect/partials/resource_discovery.erb`
+  - `/etc/ood/config/apps/dashboard/batch_connect/partials/partition_qos.rb`
 
-#
-# Make all your code changes while testing them in the OnDemand Dashboard
-#
-# ...
-#
+## Usage
 
-# Add the files to the Git repository
-git add --all
+1. Choose JupyterLab or Jupyter Notebook.
+2. Pick your course or workshop. The working directory is filled in if your
+   course has a storage directory.
+3. Choose a partition, wall time, cores, memory, and (optionally) a GPU type.
+4. Optionally change the working directory and enter a module to load. Enter
+   only the module name, for example `cuda/12.9`.
+5. Optionally check **Request priority start** for a short, small session.
+6. Launch, wait for the session to start, then click
+   **Connect to Jupyter**.
 
-# Commit the staged files to the Git repository
-git commit -m "my first commit"
-```
+## Site-Specific Configuration
 
-## Contributing
+These values are hardcoded for Tufts and need to be changed for another site:
 
-1. Fork it ( https://github.com/OSC/bc_example_jupyter/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+- `form.yml.erb`: `cluster: "pax"`, the paths to the partials, and the paths
+  to `course_list.yml` and `course_storage_map.tsv`.
+- `submit.yml.erb`: the email address domain (`@tufts.edu`) and the
+  `partition_qos.rb` path.
+- `template/script.sh.erb`: the `jupyter` module name and the course kernels
+  path (`/cluster/tufts/apps/class/kernels`).
+- `template/before.sh.erb`: the idle-shutdown timeouts.
+
+## Troubleshooting
+
+- **No Course/Workshop field on the form**: `course_list.yml` is missing or
+  unreadable on the OnDemand server.
+- **Course kernels missing in Jupyter**: check that
+  `/cluster/tufts/apps/class/kernels/<course>/kernels/` exists for the
+  selected course. `output.log` lists the kernels Jupyter found.
+- **Working directory not filled in**: the course has no entry in
+  `course_storage_map.tsv`. If the directory does not exist, the app falls
+  back to `$HOME` and says so in `output.log`.
+- **"Timed out waiting for Jupyter Notebook server"**: check `output.log` in
+  the session directory for a module that failed to load or another startup
+  error.
+- **Session ends on its own**: the server shuts down after about an hour
+  with no activity. Start a new session.
+- **Session never starts**: the requested resources may exceed what the
+  partition or the interactive QOS allows, or the selected GPU type may be
+  unavailable. Lower the request, pick another GPU type, or uncheck
+  **Request priority start**.
+
+## License
+
+MIT. See `LICENSE.txt`.
